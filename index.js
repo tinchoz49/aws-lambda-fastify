@@ -20,9 +20,15 @@ module.exports = (app, options) => {
     })
   }
 
+  let isReady = false
+
+  app.ready(() => {
+    isReady = true
+  })
+
   function inject (event, cb) {
     const req = new Request(event)
-    const res = new Response({ version: event.version })
+    const res = new Response()
 
     res.once('error', err => {
       console.error(err)
@@ -31,6 +37,7 @@ module.exports = (app, options) => {
 
     res.once('close', () => cb(null, res))
 
+    if (isReady) return app.routing(req, res)
     app.ready(() => app.routing(req, res))
   }
 
@@ -126,16 +133,40 @@ module.exports = (app, options) => {
         const contentType = (res.headers['content-type'] || res.headers['Content-Type'] || '').split(';')[0]
         const isBase64Encoded = options.binaryMimeTypes.indexOf(contentType) > -1 || customBinaryCheck(options, res)
 
+        const headers = {}
+        let multiValueHeaders
+        let cookies
+        Object.keys(res.headers).forEach(key => {
+          let value = res.headers[key]
+          const isArray = Array.isArray(value)
+
+          if (key === 'set-cookie') {
+            if (event.version === '2.0') {
+              cookies = isArray ? value : [value]
+              return true
+            }
+
+            if (isArray) {
+              if (!multiValueHeaders) multiValueHeaders = {}
+              multiValueHeaders['set-cookie'] = value
+              return true
+            }
+          } else if (isArray) {
+            value = value.join(',')
+          }
+
+          headers[key] = value
+        })
+
         const ret = {
           statusCode: res.statusCode,
           body: res.payload,
-          headers: res.headers,
-          isBase64Encoded
+          headers,
+          isBase64Encoded,
+          cookies,
+          multiValueHeaders
         }
 
-        const cookies = res.cookies
-        if (cookies && event.version === '2.0') ret.cookies = cookies
-        if (res.multiValueHeaders && (!event.version || event.version === '1.0')) ret.multiValueHeaders = res.multiValueHeaders
         resolve(ret)
       })
     })

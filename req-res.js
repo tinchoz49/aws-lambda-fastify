@@ -103,11 +103,9 @@ exports.Request = class Request extends Readable {
 
 exports.Response = class Response extends Writable {
   constructor (opts = {}) {
-    const { version, keepAliveTimeout = 0 } = opts
+    const { keepAliveTimeout = 0 } = opts
 
     super()
-
-    this._version = version
 
     this.statusCode = 200
     this.headers = {}
@@ -129,25 +127,7 @@ exports.Response = class Response extends Writable {
   }
 
   setHeader (name, value) {
-    name = name.toLowerCase()
-    const isArray = Array.isArray(value)
-
-    if (name === 'set-cookie') {
-      if (this._version === '2.0') {
-        this.cookies = isArray ? value : [value]
-        return true
-      }
-
-      if (isArray) {
-        this.multiValueHeaders = {}
-        this.multiValueHeaders['set-cookie'] = value
-        return true
-      }
-    } else if (isArray) {
-      value = value.join(',')
-    }
-
-    this.headers[name] = value
+    this.headers[name.toLowerCase()] = value
   }
 
   writeHead (statusCode, statusMessage, headers) {
