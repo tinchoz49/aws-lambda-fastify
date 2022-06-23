@@ -118,7 +118,7 @@ module.exports = (app, options) => {
 
         const ret = {
           statusCode: res.statusCode,
-          body: res.payloadIsBuffer ? res.payload.toString(isBase64Encoded ? 'base64' : 'utf8') : res.payload,
+          body: res.payload,
           headers: res.headers,
           isBase64Encoded
         }

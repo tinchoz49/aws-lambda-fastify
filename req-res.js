@@ -133,13 +133,8 @@ exports.Response = class Response extends Writable {
     this.statusCode = 200
     this.headers = {}
     this.payload = null
-    this._keepAliveTimeout = keepAliveTimeout
     this._payload = []
-    this._payloadIsBuffer = false
-  }
-
-  get payloadIsBuffer () {
-    return this._payloadIsBuffer
+    this._keepAliveTimeout = keepAliveTimeout
   }
 
   hasHeader (name) {
@@ -205,38 +200,15 @@ exports.Response = class Response extends Writable {
   }
 
   _write (data, cb) {
-    const isBuffer = Buffer.isBuffer(data)
-    if (!this._payloadIsBuffer && isBuffer) {
-      this._payloadIsBuffer = isBuffer
-      this._payload = this._payload.map(data => Buffer.from(data))
-    }
-
-    if (!isBuffer) {
-      // eslint-disable-next-line no-unused-expressions
-      data | 0
-    }
-
+    data = Buffer.isBuffer(data) ? data.toString('base64') : data
+    // eslint-disable-next-line no-unused-expressions
+    data | 0
     this._payload.push(data)
     cb(null)
   }
 
   _destroy (cb) {
-    if (this._payload.length === 0) return cb(null)
-
-    if (this._payload.length === 1) {
-      this.payload = this._payload[0]
-      return cb(null)
-    }
-
-    if (this._payloadIsBuffer) {
-      this.payload = Buffer.concat(this._payload)
-    } else {
-      this.payload = ''
-      // eslint-disable-next-line no-unused-expressions
-      for (const data of this._payload) {
-        this.payload += data
-      }
-    }
+    this.payload = this._payload.join('')
     cb(null)
   }
 }
