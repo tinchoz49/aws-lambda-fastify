@@ -1,6 +1,4 @@
-// const cookie = require('cookie')
-// const setCookie = require('set-cookie-parser')
-const { Request, Response, queryRefs } = require('./req-res.js')
+const { Request, Response } = require('./req-res.js')
 
 module.exports = (app, options) => {
   options = options || {}
@@ -21,6 +19,21 @@ module.exports = (app, options) => {
       })
     })
   }
+
+  function inject (event, cb) {
+    const req = new Request(event)
+    const res = new Response({ version: event.version })
+
+    res.once('error', err => {
+      console.error(err)
+      cb(err)
+    })
+
+    res.once('close', () => cb(null, res))
+
+    app.ready(() => app.routing(req, res))
+  }
+
   return (event, context, callback) => {
     currentAwsArguments.event = event
     currentAwsArguments.context = context
@@ -67,7 +80,9 @@ module.exports = (app, options) => {
     const headers = Object.assign({}, event.headers)
     if (event.multiValueHeaders) {
       Object.keys(event.multiValueHeaders).forEach((h) => {
-        headers[h] = event.multiValueHeaders[h].join(',')
+        if (event.multiValueHeaders[h].length > 1) {
+          headers[h] = event.multiValueHeaders[h].join(',')
+        }
       })
     }
 
@@ -89,28 +104,23 @@ module.exports = (app, options) => {
     }
 
     const prom = new Promise((resolve) => {
-      const req = new Request({
+      inject({
         method,
         url,
         query,
         body,
         enc: event.isBase64Encoded ? 'base64' : 'utf8',
-        headers
-      })
-      const res = new Response({ version: event.version })
-
-      res.once('error', err => {
+        headers,
+        version: event.version
+      }, (err, res) => {
         if (err) {
-          console.error(err)
           return resolve({
             statusCode: 500,
             body: '',
             headers: {}
           })
         }
-      })
 
-      res.once('close', () => {
         currentAwsArguments = {}
 
         const contentType = (res.headers['content-type'] || res.headers['Content-Type'] || '').split(';')[0]
@@ -128,17 +138,10 @@ module.exports = (app, options) => {
         if (res.multiValueHeaders && (!event.version || event.version === '1.0')) ret.multiValueHeaders = res.multiValueHeaders
         resolve(ret)
       })
-
-      app.ready(() => {
-        app.routing(req, res)
-      })
     })
+
     if (!callback) return prom
     prom.then((ret) => callback(null, ret)).catch(callback)
     return prom
   }
-}
-
-module.exports.querystringParser = (str) => {
-  return queryRefs.parse(str)
 }

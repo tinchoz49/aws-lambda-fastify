@@ -58,63 +58,24 @@ function resetCache () {
   utcCache = undefined
 }
 
-class QueryRefs {
-  constructor () {
-    this._refs = new Map()
-    this._free = []
-  }
-
-  add (query) {
-    let id
-    if (this._free.length) {
-      id = this._free.pop()
-    } else {
-      id = this._refs.size + 1
-    }
-
-    this._refs.set(id, query)
-    return id
-  }
-
-  parse (str) {
-    if (!str) return {}
-    const id = Number(str.split('=')[1])
-    if (id === undefined) return {}
-    const query = this._refs.get(id)
-    this._refs.delete(id)
-    this._free.push(id)
-    return query
-  }
-}
-
-const queryRefs = exports.queryRefs = new QueryRefs()
-
 exports.Request = class Request extends Readable {
   constructor (opts = {}) {
-    let { method = 'GET', url, query, remoteAddress = '127.0.0.1', body, enc, headers, authority } = opts
+    const { method = 'GET', url, query, remoteAddress = '127.0.0.1', body, enc, headers, authority } = opts
 
     super()
 
     this.httpVersion = '1.1'
 
     this.method = method.toUpperCase()
-    url = parseURL(url, query ? { ref: queryRefs.add(query) } : undefined)
-    this.url = url.pathname + url.search
+    const parsedURL = parseURL(url, query)
+    this.url = parsedURL.pathname + parsedURL.search
     this.socket = new MockSocket(remoteAddress)
     this.headers = {}
     Object.keys(headers).forEach(k => {
       this.headers[k.toLowerCase()] = headers[k]
     })
     this.headers['user-agent'] = this.headers['user-agent'] || 'lightMyRequest'
-    this.headers.host = this.headers.host || authority || hostHeaderFromURL(url)
-
-    // if (cookies) {
-    //   const cookieValues = Object.keys(cookies).map(key => cookie.serialize(key, cookies[key]))
-    //   if (this.headers.cookie) {
-    //     cookieValues.unshift(this.headers.cookie)
-    //   }
-    //   this.headers.cookie = cookieValues.join('; ')
-    // }
+    this.headers.host = this.headers.host || authority || hostHeaderFromURL(parsedURL)
 
     if (body) {
       this._body = Buffer.from(body, enc)
@@ -226,7 +187,10 @@ exports.Response = class Response extends Writable {
   }
 
   _destroy (cb) {
-    if (this._payload.length === 0) return cb(null)
+    if (this._payload.length === 0) {
+      this.payload = ''
+      return cb(null)
+    }
     if (this._payload.length === 1) {
       this.payload = this._payload[0]
       return cb(null)

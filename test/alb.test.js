@@ -112,52 +112,6 @@ test('GET Broken', async (t) => new Promise((resolve, reject) => {
   })
 }))
 
-test('GET stub inject', async (t) => {
-  t.plan(3)
-
-  const event = {
-    requestContext: { },
-    rawPath: '/test',
-    queryStringParameters: ''
-  }
-
-  const app = fastify()
-  app.inject = (_, cb) => { cb(new Error('Stub Injection')) }
-
-  const proxy = awsLambdaFastify(app)
-
-  const ret = await proxy(event)
-
-  t.same(ret.headers, {})
-  t.same(ret.statusCode, 500)
-  t.same(ret.body, '')
-})
-
-test('GET stub inject', (t) => new Promise((resolve, reject) => {
-  t.plan(4)
-
-  const event = {
-    requestContext: { },
-    rawPath: '/test',
-    queryStringParameters: ''
-  }
-
-  const app = fastify()
-  app.inject = (_, cb) => { cb(new Error('Stub Injection')) }
-
-  const proxy = awsLambdaFastify(app)
-
-  const ret = proxy(event, null, function callback (err, ret) {
-    if (err) return reject(err)
-
-    t.same(ret.headers, {})
-    t.same(ret.statusCode, 500)
-    t.same(ret.body, '')
-    resolve()
-  })
-  t.type(ret.then, 'function')
-}))
-
 test('GET with encoded query values', async (t) => {
   t.plan(2)
 
