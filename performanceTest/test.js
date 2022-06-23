@@ -12,7 +12,9 @@ const event = {
 
 // @fastify/aws-lambda stuff:
 const awsLambdaFastify = require('../index')
-const appAwsLambdaFastify = fastify()
+const appAwsLambdaFastify = fastify({
+  querystringParser: awsLambdaFastify.querystringParser
+})
 appAwsLambdaFastify.get('/test', async () => ({ hello: 'world' }))
 const proxy = awsLambdaFastify(appAwsLambdaFastify)
 

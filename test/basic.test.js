@@ -164,7 +164,9 @@ test('GET with custom binary check response', async (t) => {
 test('GET with multi-value query params', async (t) => {
   t.plan(2)
 
-  const app = fastify()
+  const app = fastify({
+    querystringParser: awsLambdaFastify.querystringParser
+  })
   app.get('/test', async (request, reply) => {
     reply.send(request.query)
   })
@@ -208,7 +210,9 @@ test('GET with multi-value query params (queryStringParameters)', async (t) => {
 test('GET with double encoded query value', async (t) => {
   t.plan(2)
 
-  const app = fastify()
+  const app = fastify({
+    querystringParser: awsLambdaFastify.querystringParser
+  })
   app.get('/test', async (request, reply) => {
     reply.send(request.query)
   })

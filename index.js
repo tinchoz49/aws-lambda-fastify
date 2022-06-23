@@ -1,12 +1,6 @@
-const isCompressedDefault = (res) => {
-  const contentEncoding = res.headers['content-encoding'] || res.headers['Content-Encoding']
-  return contentEncoding && contentEncoding !== 'identity'
-}
-
-const customBinaryCheck = (options, res) => {
-  const enforceBase64 = typeof options.enforceBase64 === 'function' ? options.enforceBase64 : isCompressedDefault
-  return enforceBase64(res) === true
-}
+// const cookie = require('cookie')
+// const setCookie = require('set-cookie-parser')
+const { Request, Response, queryRefs } = require('./req-res.js')
 
 module.exports = (app, options) => {
   options = options || {}
@@ -43,8 +37,10 @@ module.exports = (app, options) => {
         event.requestContext.resourcePath.indexOf(`/${event.requestContext.stage}/`) !== 0) {
       url = url.substring(event.requestContext.stage.length + 1)
     }
-    const query = {}
+
+    let query
     if (event.requestContext && event.requestContext.elb) {
+      query = {}
       if (event.multiValueQueryStringParameters) {
         Object.keys(event.multiValueQueryStringParameters).forEach((q) => {
           query[decodeURIComponent(q)] = event.multiValueQueryStringParameters[q].map((val) => decodeURIComponent(val))
@@ -67,17 +63,15 @@ module.exports = (app, options) => {
       }
       Object.assign(query, event.multiValueQueryStringParameters || event.queryStringParameters)
     }
+
     const headers = Object.assign({}, event.headers)
     if (event.multiValueHeaders) {
       Object.keys(event.multiValueHeaders).forEach((h) => {
-        if (event.multiValueHeaders[h].length > 1) {
-          headers[h] = event.multiValueHeaders[h]
-        }
+        headers[h] = event.multiValueHeaders[h].join(',')
       })
     }
-    const payload = Buffer.from(event.body, event.isBase64Encoded ? 'base64' : 'utf8')
-    // NOTE: API Gateway is not setting Content-Length header on requests even when they have a body
-    if (event.body && !headers['Content-Length'] && !headers['content-length']) headers['content-length'] = Buffer.byteLength(payload)
+
+    const body = event.body
 
     if (options.serializeLambdaArguments) {
       event.body = undefined // remove body from event only when setting request headers
@@ -95,8 +89,17 @@ module.exports = (app, options) => {
     }
 
     const prom = new Promise((resolve) => {
-      app.inject({ method, url, query, payload, headers }, (err, res) => {
-        currentAwsArguments = {}
+      const req = new Request({
+        method,
+        url,
+        query,
+        body,
+        enc: event.isBase64Encoded ? 'base64' : 'utf8',
+        headers
+      })
+      const res = new Response({ version: event.version })
+
+      res.once('error', err => {
         if (err) {
           console.error(err)
           return resolve({
@@ -105,47 +108,37 @@ module.exports = (app, options) => {
             headers: {}
           })
         }
-        // chunked transfer not currently supported by API Gateway
-        if (headers['transfer-encoding'] === 'chunked') delete headers['transfer-encoding']
-        if (headers['Transfer-Encoding'] === 'chunked') delete headers['Transfer-Encoding']
+      })
 
-        let multiValueHeaders
-        let cookies
-        Object.keys(res.headers).forEach((h) => {
-          const isSetCookie = h.toLowerCase() === 'set-cookie'
-          const isArraycookie = Array.isArray(res.headers[h])
-          if (isArraycookie) {
-            if (isSetCookie) {
-              multiValueHeaders = multiValueHeaders || {}
-              multiValueHeaders[h] = res.headers[h]
-            } else res.headers[h] = res.headers[h].join(',')
-          } else if (typeof res.headers[h] !== 'undefined' && typeof res.headers[h] !== 'string') {
-            // NOTE: API Gateway (i.e. HttpApi) validates all headers to be a string
-            res.headers[h] = res.headers[h].toString()
-          }
-          if (isSetCookie) {
-            cookies = isArraycookie ? res.headers[h] : [res.headers[h]]
-            if (event.version === '2.0' || isArraycookie) delete res.headers[h]
-          }
-        })
+      res.once('close', () => {
+        currentAwsArguments = {}
 
         const contentType = (res.headers['content-type'] || res.headers['Content-Type'] || '').split(';')[0]
         const isBase64Encoded = options.binaryMimeTypes.indexOf(contentType) > -1 || customBinaryCheck(options, res)
 
         const ret = {
           statusCode: res.statusCode,
-          body: isBase64Encoded ? res.rawPayload.toString('base64') : res.payload,
+          body: res.payloadIsBuffer ? res.payload.toString(isBase64Encoded ? 'base64' : 'utf8') : res.payload,
           headers: res.headers,
           isBase64Encoded
         }
 
+        const cookies = res.cookies
         if (cookies && event.version === '2.0') ret.cookies = cookies
-        if (multiValueHeaders && (!event.version || event.version === '1.0')) ret.multiValueHeaders = multiValueHeaders
+        if (res.multiValueHeaders && (!event.version || event.version === '1.0')) ret.multiValueHeaders = res.multiValueHeaders
         resolve(ret)
+      })
+
+      app.ready(() => {
+        app.routing(req, res)
       })
     })
     if (!callback) return prom
     prom.then((ret) => callback(null, ret)).catch(callback)
     return prom
   }
+}
+
+module.exports.querystringParser = (str) => {
+  return queryRefs.parse(str)
 }
