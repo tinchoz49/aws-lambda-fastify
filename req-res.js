@@ -208,6 +208,11 @@ exports.Response = class Response extends Writable {
   }
 
   _destroy (cb) {
+    if (this._payload.length === 0) return cb(null)
+    if (this._payload.length === 1) {
+      this.payload = this._payload[0]
+      return cb(null)
+    }
     this.payload = this._payload.join('')
     cb(null)
   }
