@@ -84,7 +84,7 @@ module.exports = (app, options) => {
       Object.assign(query, event.multiValueQueryStringParameters || event.queryStringParameters)
     }
 
-    const headers = Object.assign({}, event.headers)
+    const headers = event.headers
     if (event.multiValueHeaders) {
       Object.keys(event.multiValueHeaders).forEach((h) => {
         if (event.multiValueHeaders[h].length > 1) {
