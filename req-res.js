@@ -58,6 +58,9 @@ function resetCache () {
   utcCache = undefined
 }
 
+function toBuffer (chunk) {
+  return Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+}
 exports.Request = class Request extends Readable {
   constructor (opts = {}) {
     const { host = 'http://localhost', method = 'GET', url, query, remoteAddress = '127.0.0.1', body, enc, headers, authority } = opts
@@ -108,8 +111,8 @@ exports.Response = class Response extends Writable {
     super()
 
     this.statusCode = 200
-    this.payload = null
     this.chunked = false
+    this._payloadAsBuffer = false
     this._headers = new Map()
     this._payload = []
     this._keepAliveTimeout = keepAliveTimeout
@@ -135,10 +138,7 @@ exports.Response = class Response extends Writable {
   setHeader (name, value) {
     const key = name.toLowerCase()
 
-    if (key === 'transfer-encoding') {
-      this.chunked = value.includes('chunked')
-      return
-    }
+    if (key === 'transfer-encoding' && value === 'chunked') return
 
     this._headers.set(key, { name, value })
   }
@@ -173,26 +173,31 @@ exports.Response = class Response extends Writable {
     }
   }
 
+  _rawPayload (base64) {
+    if (this._payload.length === 0) return ''
+
+    if (base64 || this._payloadAsBuffer) {
+      return Buffer.concat(this._payload.map(toBuffer)).toString(base64 ? 'base64' : 'utf8')
+    }
+
+    return this._payload.join('')
+  }
+
   _write (data, cb) {
-    data = Buffer.isBuffer(data) ? data.toString('base64') : data
-    // eslint-disable-next-line no-unused-expressions
-    data | 0
+    const isBuffer = Buffer.isBuffer(data)
+
+    if (isBuffer) {
+      this._payloadAsBuffer = true
+    } else {
+      // eslint-disable-next-line no-unused-expressions
+      data | 0
+    }
+
     this._payload.push(data)
     cb()
   }
 
   _destroy (cb) {
-    if (this._payload.length === 0) {
-      this.payload = ''
-      return cb()
-    }
-
-    if (this._payload.length === 1) {
-      this.payload = this._payload[0]
-      return cb()
-    }
-
-    this.payload = this._payload.join('')
     cb()
   }
 }

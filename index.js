@@ -1,10 +1,16 @@
 const { Request, Response } = require('./req-res.js')
 
+const isCompressedDefault = (ret) => {
+  const contentEncoding = ret.headers['content-encoding']
+  return contentEncoding && contentEncoding !== 'identity'
+}
+
 module.exports = (app, options) => {
   options = options || {}
   options.binaryMimeTypes = options.binaryMimeTypes || []
   options.serializeLambdaArguments = options.serializeLambdaArguments !== undefined ? options.serializeLambdaArguments : false
   options.decorateRequest = options.decorateRequest !== undefined ? options.decorateRequest : true
+  options.enforceBase64 = typeof options.enforceBase64 === 'function' ? options.enforceBase64 : isCompressedDefault
   let currentAwsArguments = {}
   if (options.decorateRequest) {
     options.decorationPropertyName = options.decorationPropertyName || 'awsLambda'
@@ -131,9 +137,6 @@ module.exports = (app, options) => {
 
         const resHeaders = res._headers
 
-        const contentType = (resHeaders.get('content-type')?.value || '').split(';')[0]
-        const isBase64Encoded = options.binaryMimeTypes.indexOf(contentType) > -1
-
         const headers = {}
         let multiValueHeaders
         let cookies
@@ -161,12 +164,14 @@ module.exports = (app, options) => {
 
         const ret = {
           statusCode: res.statusCode,
-          body: res.payload,
           headers,
-          isBase64Encoded,
           cookies,
           multiValueHeaders
         }
+
+        const contentType = (ret.headers['content-type'] || '').split(';')[0]
+        ret.isBase64Encoded = options.binaryMimeTypes.indexOf(contentType) > -1 || !!(options.enforceBase64(ret))
+        ret.body = res._rawPayload(ret.isBase64Encoded)
 
         resolve(ret)
       })

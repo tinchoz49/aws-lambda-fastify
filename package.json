@@ -34,6 +34,9 @@
     "test:typescript": "tsd",
     "performance": "npm run lint && node performanceTest/test"
   },
+  "dependencies": {
+    "streamx": "^2.12.4"
+  },
   "devDependencies": {
     "@fastify/multipart": "7.3.0",
     "@types/aws-lambda": "8.10.109",
@@ -59,8 +62,5 @@
   },
   "publishConfig": {
     "access": "public"
-  },
-  "dependencies": {
-    "streamx": "^2.12.4"
   }
 }
