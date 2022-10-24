@@ -21,7 +21,7 @@ test('GET', async (t) => new Promise((resolve, reject) => {
   app.get('/test', async (request, reply) => {
     t.equal(request.headers['x-my-header'], 'wuuusaaa')
     t.equal(request.awsLambda.event, event)
-    t.equal(request.headers['user-agent'], 'lightMyRequest')
+    t.equal(request.headers['user-agent'], 'awsLambdaFastify')
     t.equal(request.headers.host, 'localhost:80')
     t.equal(request.headers['content-length'], '0')
     reply.header('Set-Cookie', 'qwerty=one')
@@ -79,7 +79,7 @@ test('GET Broken', async (t) => new Promise((resolve, reject) => {
     t.equal('x-custom-multi-gut' in request.headers, true)
     t.equal(request.awsLambda.event, event)
     t.equal(request.awsLambda.context, context)
-    t.equal(request.headers['user-agent'], 'lightMyRequest')
+    t.equal(request.headers['user-agent'], 'awsLambdaFastify')
     t.equal(request.headers.host, 'localhost:80')
     t.equal(request.headers['content-length'], '0')
     reply.header('Set-Cookie', 'qwerty=one')

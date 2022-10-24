@@ -1,15 +1,13 @@
 const { EventEmitter } = require('events')
 const { Readable, Writable } = require('streamx')
 
-const BASE_URL = 'http://localhost'
-
-function parseURL (url, query) {
+function parseURL (host, url, query) {
   if ((typeof url === 'string' || Object.prototype.toString.call(url) === '[object String]') && url.startsWith('//')) {
-    url = BASE_URL + url
+    url = host + url
   }
   const result = typeof url === 'object'
-    ? Object.assign(new URL(BASE_URL), url)
-    : new URL(url, BASE_URL)
+    ? Object.assign(new URL(host), url)
+    : new URL(url, host)
 
   const merged = Object.assign({}, url.query, query)
   for (const key in merged) {
@@ -32,6 +30,8 @@ class MockSocket extends EventEmitter {
   constructor (remoteAddress) {
     super()
     this.remoteAddress = remoteAddress
+    this.writable = true
+    this.readable = true
   }
 }
 
@@ -60,21 +60,21 @@ function resetCache () {
 
 exports.Request = class Request extends Readable {
   constructor (opts = {}) {
-    const { method = 'GET', url, query, remoteAddress = '127.0.0.1', body, enc, headers, authority } = opts
+    const { host = 'http://localhost', method = 'GET', url, query, remoteAddress = '127.0.0.1', body, enc, headers, authority } = opts
 
     super()
 
     this.httpVersion = '1.1'
 
     this.method = method.toUpperCase()
-    const parsedURL = parseURL(url, query)
+    const parsedURL = parseURL(host, url, query)
     this.url = parsedURL.pathname + parsedURL.search
     this.socket = new MockSocket(remoteAddress)
     this.headers = {}
     Object.keys(headers).forEach(k => {
       this.headers[k.toLowerCase()] = headers[k]
     })
-    this.headers['user-agent'] = this.headers['user-agent'] || 'lightMyRequest'
+    this.headers['user-agent'] = this.headers['user-agent'] || 'awsLambdaFastify'
     this.headers.host = this.headers.host || authority || hostHeaderFromURL(parsedURL)
 
     if (body) {
@@ -108,26 +108,43 @@ exports.Response = class Response extends Writable {
     super()
 
     this.statusCode = 200
-    this.headers = {}
     this.payload = null
+    this.chunked = false
+    this._headers = new Map()
     this._payload = []
     this._keepAliveTimeout = keepAliveTimeout
   }
 
   hasHeader (name) {
-    return name.toLowerCase() in this.headers
+    return this._headers.has(name.toLowerCase())
   }
 
   getHeader (name) {
-    return this.headers[name]
+    const header = this._headers.get(name.toLowerCase())
+    if (header) return header.value
   }
 
   getHeaders () {
-    return this.headers
+    const headers = {}
+    this._headers.forEach((header, key) => {
+      headers[key] = header.value
+    })
+    return headers
   }
 
   setHeader (name, value) {
-    this.headers[name.toLowerCase()] = value
+    const key = name.toLowerCase()
+
+    if (key === 'transfer-encoding') {
+      this.chunked = value.includes('chunked')
+      return
+    }
+
+    this._headers.set(key, { name, value })
+  }
+
+  removeHeader (name) {
+    this._headers.delete(name.toLowerCase())
   }
 
   writeHead (statusCode, statusMessage, headers) {
@@ -139,22 +156,20 @@ exports.Response = class Response extends Writable {
     }
 
     if (headers) {
-      let key
-      for (key in headers) {
+      Object.keys(headers).forEach(key => {
         this.setHeader(key, headers[key])
-      }
+      })
     }
 
-    if (!('connection' in this.headers)) {
-      this.headers['connection'] = 'keep-alive'
+    if (!(this.hasHeader('connection'))) {
+      this.setHeader('connection', 'keep-alive')
       if (this._keepAliveTimeout) {
-        const timeoutSeconds = Math.floor(this._keepAliveTimeout / 1000)
-        this.headers['keep-alive'] = `timeout=${timeoutSeconds}`
+        this.setHeader('keep-alive', `timeout=${Math.floor(this._keepAliveTimeout / 1000)}`)
       }
     }
 
-    if (!('date' in this.headers)) {
-      this.headers['date'] = utcDate()
+    if (!(this.hasHeader('date'))) {
+      this.setHeader('date', utcDate())
     }
   }
 
@@ -163,19 +178,21 @@ exports.Response = class Response extends Writable {
     // eslint-disable-next-line no-unused-expressions
     data | 0
     this._payload.push(data)
-    cb(null)
+    cb()
   }
 
   _destroy (cb) {
     if (this._payload.length === 0) {
       this.payload = ''
-      return cb(null)
+      return cb()
     }
+
     if (this._payload.length === 1) {
       this.payload = this._payload[0]
-      return cb(null)
+      return cb()
     }
+
     this.payload = this._payload.join('')
-    cb(null)
+    cb()
   }
 }

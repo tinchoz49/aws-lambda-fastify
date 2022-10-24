@@ -21,7 +21,6 @@ module.exports = (app, options) => {
   }
 
   let isReady = false
-
   app.ready(() => {
     isReady = true
   })
@@ -130,14 +129,16 @@ module.exports = (app, options) => {
 
         currentAwsArguments = {}
 
-        const contentType = (res.headers['content-type'] || res.headers['Content-Type'] || '').split(';')[0]
-        const isBase64Encoded = options.binaryMimeTypes.indexOf(contentType) > -1 || customBinaryCheck(options, res)
+        const resHeaders = res._headers
+
+        const contentType = (resHeaders.get('content-type')?.value || '').split(';')[0]
+        const isBase64Encoded = options.binaryMimeTypes.indexOf(contentType) > -1
 
         const headers = {}
         let multiValueHeaders
         let cookies
-        Object.keys(res.headers).forEach(key => {
-          let value = res.headers[key]
+        resHeaders.forEach((header, key) => {
+          let value = header.value
           const isArray = Array.isArray(value)
 
           if (key === 'set-cookie') {
