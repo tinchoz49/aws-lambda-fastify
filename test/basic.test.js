@@ -90,7 +90,7 @@ test('GET with content-encoding response', async (t) => {
   app.get('/test', async (request, reply) => {
     t.equal(request.headers['x-my-header'], 'wuuusaaa')
     t.equal(request.headers['x-apigateway-event'], '%7B%22httpMethod%22%3A%22GET%22%2C%22path%22%3A%22%2Ftest%22%2C%22headers%22%3A%7B%22X-My-Header%22%3A%22wuuusaaa%22%2C%22Content-Type%22%3A%22application%2Fjson%22%7D%7D')
-    t.equal(request.headers['user-agent'], 'lightMyRequest')
+    t.equal(request.headers['user-agent'], 'awsLambdaFastify')
     t.equal(request.headers.host, 'localhost:80')
     t.equal(request.headers['content-length'], '0')
     reply.header('Set-Cookie', 'qwerty=one')
@@ -128,7 +128,7 @@ test('GET with custom binary check response', async (t) => {
   app.get('/test', async (request, reply) => {
     t.equal(request.headers['x-my-header'], 'wuuusaaa')
     t.equal(request.headers['x-apigateway-event'], '%7B%22httpMethod%22%3A%22GET%22%2C%22path%22%3A%22%2Ftest%22%2C%22headers%22%3A%7B%22X-My-Header%22%3A%22wuuusaaa%22%2C%22Content-Type%22%3A%22application%2Fjson%22%7D%7D')
-    t.equal(request.headers['user-agent'], 'lightMyRequest')
+    t.equal(request.headers['user-agent'], 'awsLambdaFastify')
     t.equal(request.headers.host, 'localhost:80')
     t.equal(request.headers['content-length'], '0')
     reply.header('Set-Cookie', 'qwerty=one')

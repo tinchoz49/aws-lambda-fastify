@@ -1,4 +1,4 @@
-const { Request, Response } = require('./req-res.js')
+const createInject = require('./inject.js')
 
 const isCompressedDefault = (ret) => {
   const contentEncoding = ret.headers['content-encoding']
@@ -26,25 +26,7 @@ module.exports = (app, options) => {
     })
   }
 
-  let isReady = false
-  app.ready(() => {
-    isReady = true
-  })
-
-  function inject (event, cb) {
-    const req = new Request(event)
-    const res = new Response()
-
-    res.once('error', err => {
-      console.error(err)
-      cb(err)
-    })
-
-    res.once('close', () => cb(null, res))
-
-    if (isReady) return app.routing(req, res)
-    app.ready(() => app.routing(req, res))
-  }
+  const inject = createInject(app)
 
   return (event, context, callback) => {
     currentAwsArguments.event = event
@@ -62,10 +44,8 @@ module.exports = (app, options) => {
         event.requestContext.resourcePath.indexOf(`/${event.requestContext.stage}/`) !== 0) {
       url = url.substring(event.requestContext.stage.length + 1)
     }
-
-    let query
+    const query = {}
     if (event.requestContext && event.requestContext.elb) {
-      query = {}
       if (event.multiValueQueryStringParameters) {
         Object.keys(event.multiValueQueryStringParameters).forEach((q) => {
           query[decodeURIComponent(q)] = event.multiValueQueryStringParameters[q].map((val) => decodeURIComponent(val))
@@ -89,11 +69,18 @@ module.exports = (app, options) => {
       Object.assign(query, event.multiValueQueryStringParameters || event.queryStringParameters)
     }
 
-    const headers = Object.assign({}, event.headers)
+    const headers = {}
+
+    if (event.headers) {
+      Object.keys(event.headers).forEach((h) => {
+        headers[h.toLowerCase()] = event.headers[h]
+      })
+    }
+
     if (event.multiValueHeaders) {
       Object.keys(event.multiValueHeaders).forEach((h) => {
         if (event.multiValueHeaders[h].length > 1) {
-          headers[h] = event.multiValueHeaders[h].join(',')
+          headers[h.toLowerCase()] = event.multiValueHeaders[h].join(',')
         }
       })
     }
@@ -135,7 +122,7 @@ module.exports = (app, options) => {
 
         currentAwsArguments = {}
 
-        const resHeaders = res._headers
+        const resHeaders = res.headers
 
         const headers = {}
         let multiValueHeaders
@@ -171,7 +158,7 @@ module.exports = (app, options) => {
 
         const contentType = (ret.headers['content-type'] || '').split(';')[0]
         ret.isBase64Encoded = options.binaryMimeTypes.indexOf(contentType) > -1 || !!(options.enforceBase64(ret))
-        ret.body = res._rawPayload(ret.isBase64Encoded)
+        ret.body = res.rawPayload(ret.isBase64Encoded)
 
         resolve(ret)
       })
