@@ -102,6 +102,9 @@ class Request extends Readable {
         payload = this._body
       } else {
         payload = Buffer.from(this._body, this._defaultEnc)
+        if (this._enconding) {
+          payload = payload.toString(this._enconding)
+        }
       }
 
       this.push(payload)
